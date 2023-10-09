@@ -60,15 +60,23 @@ module TestMigration =
 
     let readCompareFn a b =
         task {
+            
+            let (Secondary b) = b
+            let (Primary a) = a
+
             if a.Id <> b.Id || a.Content <> b.Content then 
                 printfn $"%A{a} \r\nvs\r\n %A{b}"
         }
 
-    let CreateOrderIdAdapter (a: CreateOrderResponse) (b: CreateOrderResponse) : CreateOrderResponse =
-        { b with IdResult = a.IdResult }
+    let CreateOrderIdAdapter (a: CreateOrderResponse PrimaryResponse) (b: CreateOrderResponse SecondaryResponse) : CreateOrderResponse PrimaryResponse =
+        let (Secondary b) = b
+        let (Primary a) = a
+        { b with IdResult = a.IdResult } |> Primary
 
-    let ReadOrderIdAdapter (a: GetOrderResponse) (b: GetOrderResponse) : GetOrderResponse =
-        { a with Id = b.Id }
+    let ReadOrderIdAdapter (a: GetOrderResponse PrimaryResponse) (b: GetOrderResponse SecondaryResponse) : GetOrderResponse PrimaryResponse =
+        let (Secondary b) = b
+        let (Primary a) = a
+        { a with Id = b.Id } |> Primary
 
     let migrationDictionary = new Dictionary<int,int>()
 
@@ -79,6 +87,8 @@ module TestMigration =
             New.writeOrder
             (fun a b -> 
                 task { 
+                    let (Primary a) = a
+                    let (Secondary b) = b
                     migrationDictionary.Add(a.IdResult, b.IdResult)
                 } )
             CreateOrderIdAdapter
@@ -91,10 +101,11 @@ module TestMigration =
             New.getOrder 
             readCompareFn 
             ReadOrderIdAdapter
-            (fun a b -> 
-                {
-                    a with Id = migrationDictionary[b.Id]
-                }
+            (fun a primary -> 
+                    let (Primary p) = primary
+                    {
+                        a with Id = migrationDictionary[p.Id]
+                    }
                 )
 
 

@@ -23,17 +23,15 @@ module Adapter =
                 |> Option.map (fun o -> o = migrationSource)
                 |> Option.defaultValue false
 
-    // TODO: use types
-    type PrimaryReq<'req> = |Req of 'req
-    type PrimaryResponse<'res> = |Resp of 'res
-    type SecondaryReq<'req> = |Req of 'req
-    type SecondaryResponse<'res> = |Resp of 'res
+    type PrimaryResponse<'res> = |Primary of 'res
+
+    type SecondaryResponse<'res> = |Secondary of 'res
         
-    let private secondaryTask 
-        (lazySecondaryTask : 'resp -> 'resp Task) 
-        (runningPrimaryTask: 'resp Task) 
-        (migrateFn: 'resp -> 'resp -> unit Task) 
-        (resAdaptFn: 'resp -> 'resp -> 'resp) = 
+    let private migration 
+        (lazySecondaryTask : 'resp PrimaryResponse -> 'resp SecondaryResponse Task) 
+        (runningPrimaryTask: 'resp PrimaryResponse Task) 
+        (migrateFn: 'resp PrimaryResponse -> 'resp SecondaryResponse -> unit Task) 
+        (resAdaptFn: 'resp PrimaryResponse -> 'resp SecondaryResponse -> 'resp PrimaryResponse) = 
         backgroundTask {
             let! primaryResult = runningPrimaryTask
             try
@@ -51,9 +49,9 @@ module Adapter =
         (input: 'req) 
         (legacyFunc: 'req -> 'resp Task) 
         (newFunc: 'req -> 'resp Task) 
-        (migrateFn: 'resp -> 'resp -> unit Task) 
-        (resAdaptFn: 'resp -> 'resp -> 'resp)
-        (reqAdaptFn: 'req -> 'resp -> 'req)
+        (migrateFn: 'resp PrimaryResponse -> 'resp SecondaryResponse -> unit Task) 
+        (resAdaptFn: 'resp PrimaryResponse -> 'resp SecondaryResponse -> 'resp PrimaryResponse)
+        (reqAdaptFn: 'req -> 'resp PrimaryResponse -> 'req)
             : 'resp Task = 
         task {
 
@@ -61,9 +59,11 @@ module Adapter =
                 failwith "no sources specified"
 
             if opt.IsSingleSource MigrationSource.Legacy then
-                return! legacyFunc(input) 
+                let! r = legacyFunc(input) 
+                return r
             else if opt.IsSingleSource MigrationSource.New then
-                return! newFunc(input)
+                let! r = newFunc(input)
+                return r
             else
                 let (active,secondary) = 
                     if opt.Active = MigrationSource.Legacy then
@@ -71,27 +71,33 @@ module Adapter =
                     else
                         newFunc, legacyFunc
 
-                let activeResultTask = 
-                    active(input)
+                let runningPrimaryTask = 
+                    task {
+                        let! a = active(input)
+                        return a |> PrimaryResponse.Primary
+                    }
 
-                let lazySecondary = 
-                    fun activeOutput -> 
+                let lazySecondary activeOutput = 
+                    task {
                         let i = reqAdaptFn input activeOutput
-                        secondary(i)
+                        let! s = secondary(i)
+                        return s |> SecondaryResponse.Secondary
+                    }
 
-                return! secondaryTask lazySecondary 
-                    activeResultTask 
-                    migrateFn
-                    resAdaptFn
+                let! primaryResp = migration lazySecondary runningPrimaryTask migrateFn resAdaptFn
+
+                let (Primary unwrapped) = primaryResp
+
+                return unwrapped
         }
 
     /// migration builder for C# code
     type MigrationTaskBuilder<'req,'resp>(
         legacyFunc, 
         newFunc, 
-        migrateFn: Func<'resp, 'resp, Task>, 
-        resAdaptFn: Func<'resp, 'resp, 'resp>, 
-        reqAdaptFn: Func<'req, 'resp, 'req>) =
+        migrateFn: Func<'resp PrimaryResponse, 'resp SecondaryResponse, Task>, 
+        resAdaptFn: Func<'resp PrimaryResponse, 'resp SecondaryResponse, 'resp PrimaryResponse>, 
+        reqAdaptFn: Func<'req, 'resp PrimaryResponse, 'req>) =
         member this.MigrationTaskAsync opt (input : 'req) : 'resp Task =
             let l = legacyFunc |> FuncConvert.FromFunc<_,_>
             let n = newFunc |> FuncConvert.FromFunc<_,_>

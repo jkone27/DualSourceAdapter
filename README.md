@@ -61,49 +61,41 @@ this.writeMigrator = new MigrationTaskBuilder<CreateCustomerRequest, Customer>(
 ### Adapter Examples (may change)
 
 ```csharp
-public Task ReadCompare(Customer? customer, Customer? customerNew)
+    public Task ReadCompare(PrimaryResponse<Customer?> customer, SecondaryResponse<Customer?> customerNew)
     {
         logger.LogInformation("COMPARING CUSTOMERS...");
         return Task.CompletedTask;
     }
 
-    public async Task StoreCustomerReference(Customer oldCustomer, Customer customerNew)
+    public async Task StoreCustomerReference(PrimaryResponse<Customer> primary, SecondaryResponse<Customer> secondary)
     {
         await Task.Delay(TimeSpan.FromMilliseconds(400));
-        CustomerRefStorage.Add(oldCustomer.Id, customerNew.Id);
+
+        var p = GetPrimary(primary);
+        var s = GetSecondary(secondary);
+    
+        CustomerRefStorage.Add(p.Id, s.Id);
     }
 
-    public Customer? ReadResponseAdapter(Customer? legacyCustomer, Customer? newCustomer)
+    public PrimaryResponse<Customer?> ReadResponseAdapter(PrimaryResponse<Customer?> primary, SecondaryResponse<Customer?> secondary)
     {
-        if(legacyCustomer is not null && newCustomer is not null)
+        var p = GetPrimary(primary);
+        var s = GetSecondary(secondary);
+
+        if(s is not null && p is not null)
         {
-            newCustomer.Id = legacyCustomer.Id;
-            return newCustomer;
+            p.Id = s.Id;
+            return Primary<Customer?>(p);
         }
 
-        return newCustomer;
+        return primary;
     }
 
-    public Customer WriteResponseAdapter(Customer legacyCustomer, Customer newCustomer)
+    public PrimaryResponse<Customer> WriteResponseAdapter(PrimaryResponse<Customer> primary, SecondaryResponse<Customer> secondary)
     {
-        newCustomer.Id = legacyCustomer.Id;
-        return newCustomer;
+        // keep the reference consistent for clients
+        secondary.Item.Id = primary.Item.Id;
+        return Primary(secondary.Item);
     }
 
-    public GetCustomerById ReadRequestAdapter(GetCustomerById request, Customer?    
-        legacyCustomer) 
-    {
-        // here the reference identifier must be adapted to match the original source
-        if(legacyCustomer is not null)
-        {
-            request.Id = legacyCustomer.Id;
-        }
-
-        return request;
-    }
-
-    public CreateCustomerRequest WriteRequestAdapter(CreateCustomerRequest request, Customer? customer) 
-    {
-        return request; // NOP, in our write request there is no usage of identities, so no need to adapt
-    }
 ```

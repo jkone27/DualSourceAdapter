@@ -24,8 +24,13 @@ module Adapter =
                 |> Option.defaultValue false
 
     type PrimaryResponse<'res> = |Primary of 'res
+    let Primary p = Primary p
+    let GetPrimary (Primary p) = p
+    
 
     type SecondaryResponse<'res> = |Secondary of 'res
+    let Secondary s = Secondary s
+    let GetSecondary (Secondary s) = s
         
     let private migration 
         (lazySecondaryTask : 'resp PrimaryResponse -> 'resp SecondaryResponse Task) 

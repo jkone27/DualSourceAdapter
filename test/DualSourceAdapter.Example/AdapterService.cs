@@ -55,19 +55,22 @@ public class AdapterService : ICustomerRepository
     public async Task StoreCustomerReference(PrimaryResponse<Customer> primary, SecondaryResponse<Customer> secondary)
     {
         await Task.Delay(TimeSpan.FromMilliseconds(400));
+
+        var p = GetPrimary(primary);
+        var s = GetSecondary(secondary);
     
-        CustomerRefStorage.Add(primary.Item.Id, secondary.Item.Id);
+        CustomerRefStorage.Add(p.Id, s.Id);
     }
 
     public PrimaryResponse<Customer?> ReadResponseAdapter(PrimaryResponse<Customer?> primary, SecondaryResponse<Customer?> secondary)
     {
-        var p = primary?.Item;
-        var s = secondary?.Item;
+        var p = GetPrimary(primary);
+        var s = GetSecondary(secondary);
 
-        if(secondary is not null && primary is not null)
+        if(s is not null && p is not null)
         {
             p.Id = s.Id;
-            return PrimaryResponse<Customer?>.NewPrimary(p);
+            return Primary<Customer?>(p);
         }
 
         return primary;
@@ -77,7 +80,7 @@ public class AdapterService : ICustomerRepository
     {
         // keep the reference consistent for clients
         secondary.Item.Id = primary.Item.Id;
-        return PrimaryResponse<Customer>.NewPrimary(secondary.Item);
+        return Primary(secondary.Item);
     }
 
     public GetCustomerById ReadRequestAdapter(GetCustomerById request, PrimaryResponse<Customer?> primary) 

@@ -1,5 +1,7 @@
-# DualSourceAdapter
-adapter for a dual source to compare and migrate 
+# DualSourceAdapter 
+[![NuGet Badge](https://buildstats.info/nuget/DualSourceAdapter)](https://www.nuget.org/packages/DualSourceAdapter)
+
+Migration Adapter for a dual source API
 
 ![Alt text](image.png)
 

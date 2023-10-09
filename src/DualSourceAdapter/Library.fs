@@ -23,7 +23,11 @@ module Adapter =
                 |> Option.defaultValue false
         
 
-    let secondaryTask lazySecondaryTask runningPrimaryTask migrateFn resAdaptFn = 
+    let secondaryTask 
+        (lazySecondaryTask : 'resp -> 'resp Task) 
+        (runningPrimaryTask: 'resp Task) 
+        (migrateFn: 'resp -> 'resp -> unit Task) 
+        (resAdaptFn: 'resp -> 'resp -> 'resp) = 
         backgroundTask {
             let! primaryResult = runningPrimaryTask
             try
@@ -37,13 +41,13 @@ module Adapter =
 
     let migrate 
         (opt : MigrationOption) 
-        (input: 'a) 
-        (legacyFunc: 'a -> 'b Task) 
-        (newFunc: 'a -> 'b Task) 
-        (migrateFn: 'b -> 'b -> unit Task) 
-        (resAdaptFn: 'b -> 'b -> 'b)
-        (reqAdaptFn: 'a -> 'b -> 'a)
-            : 'b Task = 
+        (input: 'req) 
+        (legacyFunc: 'req -> 'resp Task) 
+        (newFunc: 'req -> 'resp Task) 
+        (migrateFn: 'resp -> 'resp -> unit Task) 
+        (resAdaptFn: 'resp -> 'resp -> 'resp)
+        (reqAdaptFn: 'req -> 'resp -> 'req)
+            : 'resp Task = 
         task {
 
             if opt.Sources |> Seq.isEmpty then

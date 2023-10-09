@@ -4,6 +4,10 @@
     <ProjectReference Include="..\..\src\DualSourceAdapter\DualSourceAdapter.fsproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="7.0.1" />
+  </ItemGroup>
+
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net6.0</TargetFramework>

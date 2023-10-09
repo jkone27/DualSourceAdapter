@@ -73,7 +73,7 @@ module TestMigration =
     let migrationDictionary = new Dictionary<int,int>()
 
     let writeMigrate (option: MigrationOption) (input: CreateOrderRequest) = 
-        migrate option 
+        migrationTaskBuilderFn option 
             input 
             Legacy.writeOrder 
             New.writeOrder
@@ -85,7 +85,7 @@ module TestMigration =
             (fun a b -> a)
 
     let readMigrate (option: MigrationOption) (input: GetOrderRequest) = 
-        migrate option 
+        migrationTaskBuilderFn option 
             input 
             Legacy.getOrder 
             New.getOrder 

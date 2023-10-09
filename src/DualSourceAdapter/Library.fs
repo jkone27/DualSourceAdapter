@@ -11,6 +11,7 @@ module Adapter =
         | Legacy = 0 
         | New = 1
 
+    [<CLIMutable>]
     type MigrationOption = {
             Sources: MigrationSource []
             Active: MigrationSource
@@ -21,9 +22,14 @@ module Adapter =
                 |> Seq.tryExactlyOne
                 |> Option.map (fun o -> o = migrationSource)
                 |> Option.defaultValue false
-        
 
-    let secondaryTask 
+    // TODO: use types
+    type PrimaryReq<'req> = |Req of 'req
+    type PrimaryResponse<'res> = |Resp of 'res
+    type SecondaryReq<'req> = |Req of 'req
+    type SecondaryResponse<'res> = |Resp of 'res
+        
+    let private secondaryTask 
         (lazySecondaryTask : 'resp -> 'resp Task) 
         (runningPrimaryTask: 'resp Task) 
         (migrateFn: 'resp -> 'resp -> unit Task) 
@@ -39,7 +45,8 @@ module Adapter =
                 return primaryResult
         }
 
-    let migrate 
+    /// migration function for F# code, curried version
+    let migrationTaskBuilderFn 
         (opt : MigrationOption) 
         (input: 'req) 
         (legacyFunc: 'req -> 'resp Task) 
@@ -77,3 +84,25 @@ module Adapter =
                     migrateFn
                     resAdaptFn
         }
+
+    /// migration builder for C# code
+    type MigrationTaskBuilder<'req,'resp>(
+        legacyFunc, 
+        newFunc, 
+        migrateFn: Func<'resp, 'resp, Task>, 
+        resAdaptFn: Func<'resp, 'resp, 'resp>, 
+        reqAdaptFn: Func<'req, 'resp, 'req>) =
+        member this.MigrationTaskAsync opt (input : 'req) : 'resp Task =
+            let l = legacyFunc |> FuncConvert.FromFunc<_,_>
+            let n = newFunc |> FuncConvert.FromFunc<_,_>
+
+            // TODO: smarter way to turn this to unit Task?
+            let m req res = task { 
+                let mm = migrateFn |> FuncConvert.FromFunc
+                let! r = mm req res
+                return r
+            }
+       
+            let resAdapt = resAdaptFn |> FuncConvert.FromFunc
+            let reqAdapt = reqAdaptFn |> FuncConvert.FromFunc
+            migrationTaskBuilderFn opt input l n m resAdapt reqAdapt

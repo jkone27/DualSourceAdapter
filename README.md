@@ -100,4 +100,21 @@ this.writeMigrator = new MigrationTaskBuilder<CreateCustomerRequest, Customer>(
         return Primary(secondary.Item);
     }
 
+    public GetCustomerById ReadRequestAdapter(GetCustomerById request, PrimaryResponse<Customer?> primary) 
+    {
+        Customer? p = primary.Item;
+        
+        if(p is not null)
+        {
+            // grab the reference for the identifier in the new storage, based on old
+            request.Id = CustomerRefStorage[p.Id];
+        }
+
+        return request;
+    }
+
+    public CreateCustomerRequest WriteRequestAdapter(CreateCustomerRequest request, PrimaryResponse<Customer> _) 
+    {
+        return request; // NOP
+    }
 ```

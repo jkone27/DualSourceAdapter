@@ -1,6 +1,8 @@
 # DualSourceAdapter
 adapter for a dual source to compare and migrate 
 
+![Alt text](image.png)
+
 ## Configuration
 
 Here an example configuration with 3 implementations of `ICustomerRepository`,

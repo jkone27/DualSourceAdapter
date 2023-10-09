@@ -23,18 +23,16 @@ module Adapter =
                 |> Option.defaultValue false
         
 
-    let secondaryTask lazySecondaryTask runningPrimaryTask compareFunction  = 
+    let secondaryTask lazySecondaryTask runningPrimaryTask migrateFn resAdaptFn = 
         backgroundTask {
-            printfn "BACKGROUND TASK START"
+            let! primaryResult = runningPrimaryTask
             try
-                let! primaryResult = runningPrimaryTask
-                let! secondaryResult = lazySecondaryTask()
-                compareFunction primaryResult secondaryResult
-                ()
-                printfn "BACKGROUND TASK STOP"
+                let! secondaryResult = lazySecondaryTask primaryResult
+                do! migrateFn primaryResult secondaryResult
+                return resAdaptFn primaryResult secondaryResult
             with e ->
-                printfn "BACKGROUND SECONDARY EX: %A" e.Message
-                ()
+                printfn "SECONDARY SECONDARY EX: %A" e.Message
+                return primaryResult
         }
 
     let migrate 
@@ -42,7 +40,9 @@ module Adapter =
         (input: 'a) 
         (legacyFunc: 'a -> 'b Task) 
         (newFunc: 'a -> 'b Task) 
-        (compareFunc: 'b -> 'b -> unit) 
+        (migrateFn: 'b -> 'b -> unit Task) 
+        (resAdaptFn: 'b -> 'b -> 'b)
+        (reqAdaptFn: 'a -> 'b -> 'a)
             : 'b Task = 
         task {
 
@@ -59,12 +59,17 @@ module Adapter =
                         legacyFunc, newFunc
                     else
                         newFunc, legacyFunc
-                
-                if opt.IsCompare then
-                    let activeResultTask = active(input)
-                    let lazySecondary = fun () -> secondary(input)
-                    let! _ = secondaryTask lazySecondary activeResultTask compareFunc
-                    return! activeResultTask
-                else
-                    return! active(input)
+
+                let activeResultTask = 
+                    active(input)
+
+                let lazySecondary = 
+                    fun activeOutput -> 
+                        let i = reqAdaptFn input activeOutput
+                        secondary(i)
+
+                return! secondaryTask lazySecondary 
+                    activeResultTask 
+                    migrateFn
+                    resAdaptFn
         }

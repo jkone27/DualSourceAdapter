@@ -16,7 +16,7 @@ module FakeContracts =
     type CreateOrderResponse = { IdResult: int }
 
     type GetOrderRequest = { Id: int }
-    type GetOrderResponse = { Content: string }
+    type GetOrderResponse = { Id: int; Content: string }
 
 module Legacy =
 
@@ -27,12 +27,13 @@ module Legacy =
         printfn $"OLD WRITE: {createOrderRequest.Test}"
         let id = Utils.rnd.Next()
         legacyDB.Add(id, createOrderRequest.Test)
+        printfn $"DB created: {id}"
         return { IdResult = id }
     }
 
-    let getOrder getOrderRequest = task {
+    let getOrder (getOrderRequest: GetOrderRequest) = task {
         printfn $"OLD READ: {getOrderRequest.Id}"
-        return { Content = legacyDB[getOrderRequest.Id] }
+        return { Id = getOrderRequest.Id; Content = legacyDB[getOrderRequest.Id] }
     }
 
 module New =
@@ -44,25 +45,57 @@ module New =
         printfn $"NEW WRITE: {createOrderRequest.Test}"
         let id = Utils.rnd.Next()
         newDB.Add(id, createOrderRequest.Test)
+        printfn $"API created: {id}"
         return { IdResult = id }
     }
 
-    let getOrder getOrderRequest = task {
+    let getOrder (getOrderRequest : GetOrderRequest) = task {
         printfn $"NEW READ: {getOrderRequest.Id}"
-        return { Content = newDB[getOrderRequest.Id] }
+        return { Id = getOrderRequest.Id ; Content = newDB[getOrderRequest.Id] }
     }
 
 module TestMigration =
 
     open FakeContracts
 
-    let compareFn a b =
-            printfn "COMPARE!!!!"
-    let writeMigrate (option: MigrationOption) input = 
-        migrate option input Legacy.writeOrder New.writeOrder compareFn
+    let readCompareFn a b =
+        task {
+            if a.Id <> b.Id || a.Content <> b.Content then 
+                printfn $"%A{a} \r\nvs\r\n %A{b}"
+        }
 
-    let readMigrate (option: MigrationOption) input = 
-        migrate option input Legacy.getOrder New.getOrder compareFn
+    let CreateOrderIdAdapter (a: CreateOrderResponse) (b: CreateOrderResponse) : CreateOrderResponse =
+        { b with IdResult = a.IdResult }
+
+    let ReadOrderIdAdapter (a: GetOrderResponse) (b: GetOrderResponse) : GetOrderResponse =
+        { a with Id = b.Id }
+
+    let migrationDictionary = new Dictionary<int,int>()
+
+    let writeMigrate (option: MigrationOption) (input: CreateOrderRequest) = 
+        migrate option 
+            input 
+            Legacy.writeOrder 
+            New.writeOrder
+            (fun a b -> 
+                task { 
+                    migrationDictionary.Add(a.IdResult, b.IdResult)
+                } )
+            CreateOrderIdAdapter
+            (fun a b -> a)
+
+    let readMigrate (option: MigrationOption) (input: GetOrderRequest) = 
+        migrate option 
+            input 
+            Legacy.getOrder 
+            New.getOrder 
+            readCompareFn 
+            ReadOrderIdAdapter
+            (fun a b -> 
+                {
+                    a with Id = migrationDictionary[b.Id]
+                }
+                )
 
 
     let migration option =
@@ -70,9 +103,11 @@ module TestMigration =
 
             let createOrder = { Test = "test" }
 
-            let! writeResult = writeMigrate option createOrder
+            let! writeResult = 
+                writeMigrate option createOrder
 
-            let! readResult = readMigrate option { Id = writeResult.IdResult }
+            let! readResult = 
+                readMigrate option { Id = writeResult.IdResult }
 
             return readResult
 
@@ -105,7 +140,30 @@ module Options =
         IsCompare = false
     }
 
+
 module Tests =
+
+
+    let ``run migration with `` (options : MigrationOption list)  =
+            task {
+
+                let! res = 
+                    options 
+                    |> List.map (fun o ->
+                        printfn $"{o}"
+                        TestMigration.migration o 
+                    )
+                    |> Task.WhenAll
+                    
+
+                for r in res do
+                    let isNotWhiteSpace = 
+                        r.Content  
+                        |> (String.IsNullOrWhiteSpace >> not)
+        
+                    Assert.True isNotWhiteSpace
+            }
+
 
     [<Fact>]
     let ``test sources picker``() =
@@ -116,11 +174,13 @@ module Tests =
         Options.NewActiveDual.IsSingleSource MigrationSource.New |> Assert.False
 
     [<Fact>]
-    let ``test migration adapter when legacy active and dual, ok``() =
-        task {
+    let ``test migration adapter with different possible configs, ok``() =
+        [
+            Options.Legacy
+            Options.New
+            Options.LegacyActiveDual
+            Options.NewActiveDual 
+        ]
+        |> ``run migration with ``
 
-            let! res = TestMigration.migration Options.LegacyActiveDual
-
-            Assert.NotEmpty(res.Content)
-
-        }
+        

@@ -1,2 +1,11 @@
-﻿// See https://aka.ms/new-console-template for more information
-Console.WriteLine("Hello, World!");
+﻿using DualSourceAdapter;
+
+
+public static class Program {
+
+    public static void Main(params string[] args)
+    {
+        Console.WriteLine("Hello, World!");
+    }
+
+}

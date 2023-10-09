@@ -16,7 +16,7 @@ public class AdapterService : ICustomerRepository
     private readonly MigrationTaskBuilder<GetCustomerById, Customer?> readMigrator;
     private readonly MigrationTaskBuilder<CreateCustomerRequest, Customer> writeMigrator;
 
-    private readonly Dictionary<Guid,Guid> CustomerRefStorage = new Dictionary<Guid, Guid>();
+    private readonly Dictionary<Guid,Guid> CustomerRefStorage = new();
 
     public AdapterService(
         LegacyService legacyService, 
@@ -28,6 +28,7 @@ public class AdapterService : ICustomerRepository
         this.newService = newService;
         this.migrationOption = migrationOption;
         this.logger = logger;
+        
         this.readMigrator = new MigrationTaskBuilder<GetCustomerById, Customer?>(
             legacyService.GetCustomerByIdAsync,
             newService.GetCustomerByIdAsync,
@@ -45,48 +46,57 @@ public class AdapterService : ICustomerRepository
         );
     }
 
-    public Task ReadCompare(Customer? customer, Customer? customerNew)
+    public Task ReadCompare(PrimaryResponse<Customer?> customer, SecondaryResponse<Customer?> customerNew)
     {
         logger.LogInformation("COMPARING CUSTOMERS...");
         return Task.CompletedTask;
     }
 
-    public async Task StoreCustomerReference(Customer secondary, Customer primary)
+    public async Task StoreCustomerReference(PrimaryResponse<Customer> primary, SecondaryResponse<Customer> secondary)
     {
         await Task.Delay(TimeSpan.FromMilliseconds(400));
-        CustomerRefStorage.Add(secondary.Id, primary.Id);
+
+        var p = GetPrimary(primary);
+        var s = GetSecondary(secondary);
+    
+        CustomerRefStorage.Add(p.Id, s.Id);
     }
 
-    public Customer? ReadResponseAdapter(Customer? secondary, Customer? primary)
+    public PrimaryResponse<Customer?> ReadResponseAdapter(PrimaryResponse<Customer?> primary, SecondaryResponse<Customer?> secondary)
     {
-        if(secondary is not null && primary is not null)
+        var p = GetPrimary(primary);
+        var s = GetSecondary(secondary);
+
+        if(s is not null && p is not null)
         {
-            primary.Id = secondary.Id;
-            return primary;
+            p.Id = s.Id;
+            return Primary<Customer?>(p);
         }
 
         return primary;
     }
 
-    public Customer WriteResponseAdapter(Customer secondary, Customer primary)
+    public PrimaryResponse<Customer> WriteResponseAdapter(PrimaryResponse<Customer> primary, SecondaryResponse<Customer> secondary)
     {
         // keep the reference consistent for clients
-        primary.Id = secondary.Id;
-        return primary;
+        secondary.Item.Id = primary.Item.Id;
+        return Primary(secondary.Item);
     }
 
-    public GetCustomerById ReadRequestAdapter(GetCustomerById request, Customer? secondary) 
+    public GetCustomerById ReadRequestAdapter(GetCustomerById request, PrimaryResponse<Customer?> primary) 
     {
-        if(secondary is not null)
+        Customer? p = primary.Item;
+        
+        if(p is not null)
         {
             // grab the reference for the identifier in the new storage, based on old
-            request.Id = CustomerRefStorage[secondary.Id];
+            request.Id = CustomerRefStorage[p.Id];
         }
 
         return request;
     }
 
-    public CreateCustomerRequest WriteRequestAdapter(CreateCustomerRequest request, Customer? customer) 
+    public CreateCustomerRequest WriteRequestAdapter(CreateCustomerRequest request, PrimaryResponse<Customer> _) 
     {
         return request; // NOP
     }

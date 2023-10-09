@@ -120,3 +120,19 @@ this.writeMigrator = new MigrationTaskBuilder<CreateCustomerRequest, Customer>(
         return request; // NOP
     }
 ```
+
+## Usage
+
+Migration options can be specified as same or different, depending on the usage. ideally it make sense to use the same source for different flows, but you might need specific settings or runtime changes for test of individuals, in which case, you still can, since the migration options are dispatched dynamically.
+
+```csharp
+ public Task<Customer?> GetCustomerByIdAsync(GetCustomerById request)
+    {
+        return readMigrator.MigrationTaskAsync(migrationOption, request);
+    }
+
+    public Task<Customer> SaveCutomerAsync(CreateCustomerRequest request)
+    {
+        return writeMigrator.MigrationTaskAsync(migrationOption, request);
+    }
+```
